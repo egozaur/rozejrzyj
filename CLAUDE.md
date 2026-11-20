@@ -12,7 +12,7 @@ Always respond to the user in Polish (zawsze odpowiadaj po polsku). UI text and 
 
 Static HTML/CSS/JS, no build step, served at `https://pl3y.pl/rozejrzyj/` (repo `egozaur/rozejrzyj`, GitHub Pages). Work happens on two machines: **macOS** (Python 3, Node, Chrome; no PowerShell) and **Windows** (no Node or Python; PowerShell 5.1, Edge). Check which one you are on and use the matching command below. The look follows the PL3Y lobby (black and gold, Cormorant Garamond + JetBrains Mono + Inter; tokens copied 1:1 from `lobby/index.html`).
 
-- `index.html`: the whole game. Screens (`view`): `menu → setup → order → drum → turn → roundEnd → … → end`, plus `stats`. Loads the shared PL3Y password gate `/auth.js` (404 locally, so no password there).
+- `index.html`: the whole game. Screens (`view`): `menu → setup → order → drum → turn → roundEnd → … → end`, plus `stats`. Loads the shared PL3Y password gate `/auth.js` (404 locally, so no password there). `rz.js` sends the session token from `localStorage.pl3y_token` as `Authorization`; a 401 or 429 keeps the round in the offline queue (`rz_queue`).
 - `rz.js` (`window.RZ`):
   - `LETTERS`: the letter pool, the same as on the server; no Ą Ę Ń Ó Ź Ć Q V X Y.
   - `norm()`: NFC, collapsed spaces, Polish lowercase; the same function as on the server.

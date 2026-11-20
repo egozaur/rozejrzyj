@@ -2,6 +2,14 @@
    (z kolejką offline), tryb lokalny ?local=1 (ta sama klasa RzWords w przeglądarce) i dźwięk (WebAudio, bez plików). */
 (function () {
   const API = 'https://pl3y-server.pl3y.workers.dev';
+
+// Token sesji PL3Y: wydaje go serwer po podaniu hasła w bramce (/auth.js), tu tylko go odczytujemy.
+// Do zapytań HTTP idzie nagłówkiem Authorization, do WebSocketu parametrem ?tok= (przeglądarka nie ustawi nagłówka).
+const plToken = () => { try { const t = localStorage.getItem('pl3y_token'); return t && Number(localStorage.getItem('pl3y_token_exp')) > Date.now() ? t : ''; } catch (e) { return ''; } };
+const authHead = (h = {}) => { const t = plToken(); return t ? { ...h, Authorization: 'Bearer ' + t } : h; };
+const wsTok = () => { const t = plToken(); return t ? '?tok=' + encodeURIComponent(t) : ''; };
+// Serwer odrzucił sesję (401): pokaż bramkę hasła.
+const onAuthFail = r => { if (r.status === 401 && window.PL3Y && window.PL3Y.expired) window.PL3Y.expired(); };
   const LOCAL = new URLSearchParams(location.search).has('local');
   const APP = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   // Ta sama pula co na serwerze (worker/src/rozejrzyj/words.js). Bez Ą Ę Ń Ó Ź Ć Q V X Y.
@@ -46,7 +54,8 @@
     }
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 8000);
     try {
-      const r = await fetch(API + path, { method, signal: ctl.signal, headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined, body: body !== undefined ? JSON.stringify(body) : undefined });
+      const r = await fetch(API + path, { method, signal: ctl.signal, headers: authHead(body !== undefined ? { 'Content-Type': 'application/json' } : {}), body: body !== undefined ? JSON.stringify(body) : undefined });
+      onAuthFail(r);
       if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
       return await r.json();
     } finally { clearTimeout(t); }
@@ -61,7 +70,7 @@
       let q = store.get(QKEY, []);
       while (q.length) {
         try { await api('POST', '/api/rz/rounds', q[0]); }
-        catch (e) { if (!(e.status >= 400 && e.status < 500)) break; }   // 4xx = zła runda, nie ponawiamy
+        catch (e) { if (!(e.status >= 400 && e.status < 500) || e.status === 401 || e.status === 429) break; }   // 4xx = zła runda, nie ponawiamy; 401 (sesja) i 429 (tempo) zostają w kolejce
         q = store.get(QKEY, []).slice(1);
         store.set(QKEY, q);
       }
