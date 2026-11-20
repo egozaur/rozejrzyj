@@ -42,7 +42,7 @@ Letter grid → per letter:
 To merge variants (e.g. szklanki → szklanka), select words, pick a target and click „Scal”. Merges are aliases applied when reading, so raw rounds stay untouched and „Rozłącz” undoes a merge. Export: CSV (`;`, UTF-8 BOM) and JSON.
 
 ## Server
-Lives on the shared PL3Y Worker in the `egozaur/mafia` repo: `worker/src/rozejrzyj/words.js` (DO `RzWords`, singleton), tests in `worker/test/rozejrzyj.suite.js`. Routes:
+Lives on the shared PL3Y Worker in the sibling repo `../mafia` (only these files matter, ignore the rest of that repo): `worker/src/rozejrzyj/words.js` (DO `RzWords`, singleton, runtime-agnostic because `?local=1` imports it), tests `worker/test/rozejrzyj.suite.js`. Only a shared word database, no rooms. Storage keys: `r:<id>` raw rounds `{letter, words, ts}` (never changed); `agg:<L>` per-letter counters `{rounds, first, all}` (updated on each POST); `alias` merges (applied on read, so reversible); `learned` words accepted in games. The Worker allows only the listed method per route and caps the body at 8 kB. Routes:
 - `GET /api/rz/stats`
 - `POST /api/rz/rounds` `{letter, words}`
 - `PUT /api/rz/alias` `{from:[…], to}`
@@ -52,7 +52,7 @@ Lives on the shared PL3Y Worker in the `egozaur/mafia` repo: `worker/src/rozejrz
 Keep both sides in sync: `LETTERS`, `norm`, and the limits (≤ 60 words, ≤ 40 chars).
 
 ## Local testing
-- `powershell -ExecutionPolicy Bypass -File dev\serve.ps1` serves the whole `Documents` folder on port 8092 (keep the script ASCII-only). Open `http://localhost:8092/rozejrzyj/?local=1`. Without `?local`, the game talks to the production server.
+- `powershell -ExecutionPolicy Bypass -File dev\serve.ps1` serves the parent folder (`Claude-roboczy`, so `../mafia` is reachable) on port 8092 (keep the script ASCII-only). Open `http://localhost:8092/rozejrzyj/?local=1`. Without `?local`, the game talks to the production server.
 - `?still` skips the drum animation, which helps screenshots: headless Edge doesn't advance rAF under `--virtual-time-budget`.
 - End-to-end: `sh dev/run-e2e.sh` (real time, about 45 s, prints `E2E RESULT`). It drives `dev/e2e.html`, which clicks the real buttons in an iframe with a clean local database. It covers:
   - the setup screen;
