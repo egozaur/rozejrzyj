@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><title>Rozejrzyj się — E2E</title>
+<style>
+html, body { margin: 0; height: 100%; background: #0C0B09; color: #EFE8D8; font: 13px/1.4 monospace; }
+iframe { border: 0; width: 100%; height: 100%; display: block; }
+#log { position: fixed; right: 8px; bottom: 8px; max-width: 46vw; max-height: 40vh; overflow: auto; background: rgba(0,0,0,.85); padding: 8px 10px; border: 1px solid #C9A85C55; border-radius: 8px; white-space: pre-wrap; z-index: 9; }
+body.clean #log { display: none; }
+</style></head>
+<body>
+<iframe id="f"></iframe>
+<pre id="log"></pre>
+<script>
+/* Test end-to-end: klika prawdziwe przyciski gry w iframe (tryb lokalny ?local=1, czysta baza).
+   ?w=390  szerokość iframe (telefon). ?clean  bez panelu logu.
+   ?stopAt=<widok>[&n=<runda>]  (bęben bez animacji) zatrzymuje się na danym widoku (menu|setup|order|drum|turn|roundEnd|end|stats) do zrzutów ekranu.
+   Wynik w konsoli: „E2E RESULT: PASS|FAIL …”. Uruchamiaj w czasie rzeczywistym (zegar 10 s na ruch). */
+const qs = new URLSearchParams(location.search);
+const STOP = qs.get('stopAt');
+if (qs.has('clean')) document.body.classList.add('clean');
+const logEl = document.getElementById('log');
+const log = m => { logEl.textContent += m + '\n'; console.log('[e2e] ' + m); logEl.scrollTop = 1e9; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let W, D;
+const $ = s => D.querySelector(s);
+const $$ = s => [...D.querySelectorAll(s)];
+function assert(c, m) { if (!c) throw new Error(m); log('✓ ' + m); }
+async function until(fn, ms = 15000, what = 'warunek') {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { try { const v = fn(); if (v) return v; } catch (e) {} await sleep(60); }
+  throw new Error('Timeout: ' + what);
+}
+const click = s => { const el = typeof s === 'string' ? $(s) : s; if (!el) throw new Error('Brak elementu ' + s); el.click(); };
+const key = (k, target) => (target || D.body).dispatchEvent(new W.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+async function type(word) {
+  const inp = $('#word'); inp.value = word; inp.dispatchEvent(new W.Event('input', { bubbles: true }));
+  $('#entry').requestSubmit(); await sleep(120);
+}
+const view = () => W.RZ_DEBUG.view;
+async function stop(v, n) {
+  if (STOP === v && (!qs.get('n') || +qs.get('n') === n)) {
+    log('STOP @ ' + v);
+    for (const s of (qs.get('rects') || '').split(',').filter(Boolean)) { const el = $(s); log(s + ' ' + (el ? JSON.stringify(el.getBoundingClientRect()) : 'brak')); }
+    await new Promise(() => {});
+  }
+}
+
+async function main() {
+  // Czysta baza lokalna i stan gry.
+  for (const k of ['rz_local_db', 'rz_queue_local', 'rz_learned_local', 'rz_game', 'rz_players', 'rz_rounds', 'rz_time']) localStorage.removeItem(k);
+  localStorage.setItem('rz_snd', JSON.stringify({ on: false }));
+  const f = document.getElementById('f');
+  if (qs.get('w')) { f.style.width = qs.get('w') + 'px'; f.style.margin = '0 auto'; f.style.outline = '1px solid #C9A85C33'; }
+  f.src = '../index.html?local=1' + (STOP ? '&still' : '');
+  await new Promise(r => f.onload = r);
+  W = f.contentWindow; D = f.contentDocument;
+  await until(() => $('[data-act="new"]'), 5000, 'menu');
+  await stop('menu');
+
+  // ---------- kreator ----------
+  click('[data-act="new"]');
+  await until(() => $('[data-pi="0"]'));
+  const names = ['Ania', 'Bartek', 'Celina'];
+  const setName = (i, v) => { const el = $(`[data-pi="${i}"]`); el.value = v; el.dispatchEvent(new W.Event('input', { bubbles: true })); };
+  setName(0, names[0]); setName(1, names[1]);
+  click('[data-act="addp"]'); setName(2, names[2]);
+  click('[data-act="rounds"][data-d="-1"]'); click('[data-act="rounds"][data-d="-1"]'); click('[data-act="rounds"][data-d="-1"]');
+  assert($('.stepper output').textContent === '2', 'kreator: 2 rundy');
+  click('[data-act="time"][data-t="10"]');
+  assert($('[data-act="time"][data-t="10"]').getAttribute('aria-pressed') === 'true', 'kreator: 10 s na ruch');
+  // Duplikat imienia jest odrzucany.
+  setName(2, 'ania'); click('[data-act="start"]');
+  assert(/różnić/.test($('#serr').textContent), 'kreator: odrzuca powtórzone imię');
+  setName(2, names[2]);
+  await stop('setup');
+  click('[data-act="start"]');
+
+  // ---------- kolejność ----------
+  await until(() => view() === 'order');
+  const G = W.RZ_DEBUG.G;
+  assert($$('.order li').length === 3, 'kolejność: 3 graczy');
+  assert(new Set(G.letters).size === 2 && G.letters.every(l => W.RZ.LETTERS.includes(l)), 'litery z puli, bez powtórek');
+  await stop('order');
+  key('Enter');
+
+  // ---------- runda 1 ----------
+  await until(() => view() === 'drum');
+  await stop('drum');
+  await until(() => $('[data-act="go"]'), 8000, 'bęben się zatrzymał');
+  const R1 = W.RZ_DEBUG.R;
+  assert($('#after .who').textContent === names[G.order[0]], 'runda 1: zaczyna pierwszy z kolejności');
+  key('Enter');
+  await until(() => view() === 'turn' && $('#word'));
+  const L = R1.letter, l = L.toLocaleLowerCase('pl');
+  assert($('#tname').textContent === names[G.order[0]], 'tura: pierwszy gracz');
+  // Zła litera.
+  const wrong = W.RZ.LETTERS.find(x => x !== L).toLocaleLowerCase('pl') + 'abc';
+  await type(wrong);
+  assert(/zaczynać się/.test($('#msg').textContent) && R1.words.length === 0, 'zła litera zablokowana');
+  assert(R1.cur === 0, 'zła litera: tura bez zmian');
+  // Słowo spoza słownika.
+  const w1 = l + 'xqtest';
+  await type(w1);
+  assert(R1.words.length === 1 && R1.words[0].warn, 'słowo spoza słownika przyjęte z ostrzeżeniem');
+  assert($('#words .warn'), 'znacznik „spoza słownika” na liście');
+  assert($('#tname').textContent === names[G.order[1]], 'tura przeszła na drugiego gracza');
+  // Powtórka.
+  await type(w1.toUpperCase() + '  ');
+  assert(/już padło/.test($('#msg').textContent) && R1.words.length === 1, 'powtórka zablokowana (bez względu na wielkość liter)');
+  // Słowo ze słownika.
+  const dict = [...W.RZ_NOUNS].find(w => w.startsWith(l) && w !== w1);
+  await type(dict);
+  assert(R1.words.length === 2 && !R1.words[1].warn, `słowo ze słownika bez ostrzeżenia (${dict})`);
+  await stop('turn', 1);
+  // Pauza zamraża zegar.
+  key('Escape');
+  assert($('#paused'), 'pauza');
+  const leftAtPause = W.RZ_DEBUG.T.left; await sleep(600);
+  assert(W.RZ_DEBUG.T.left === leftAtPause && W.RZ_DEBUG.T.paused, 'pauza: zegar stoi');
+  key('Escape');
+  assert(!$('#paused'), 'wznowienie');
+  // Weto ostatniego słowa (Delete na pustym polu → okno → Enter).
+  key('Delete', $('#word'));
+  await until(() => D.getElementById('modal'), 2000, 'okno weta');
+  key('Enter');
+  assert(R1.words[1].vetoed && !R1.alive[1], 'weto: słowo przekreślone, autor odpada');
+  assert($('.pc.out'), 'weto: karta gracza przygaszona');
+  assert($('#tname').textContent === names[G.order[2]], 'po wecie gra trzeci gracz');
+  // Timeout trzeciego gracza → zostaje tylko pierwszy.
+  log('czekam na koniec czasu…');
+  await until(() => view() === 'roundEnd', 14000, 'koniec czasu kończy rundę');
+  assert($('.winner').textContent === names[G.order[0]], 'runda 1: wygrywa ostatni na placu');
+  assert(G.scores[G.order[0]] === 1 && G.scores.reduce((a, b) => a + b) === 1, 'runda 1: +1 pkt');
+  await until(() => /zapisane/.test($('#saved').textContent), 5000, 'zapis w bazie');
+  assert(true, 'runda 1 zapisana w bazie');
+  await stop('roundEnd', 1);
+  key('Enter');
+
+  // ---------- runda 2 ----------
+  await until(() => $('[data-act="go"]'), 8000, 'bęben runda 2');
+  const R2 = W.RZ_DEBUG.R;
+  assert(R2.letter !== L, 'runda 2: inna litera');
+  assert($('#after .who').textContent === names[G.order[1]], 'runda 2: zaczyna następna osoba');
+  click('[data-act="go"]');
+  await until(() => view() === 'turn');
+  const l2 = R2.letter.toLocaleLowerCase('pl');
+  await type(l2 + 'zzwariant');
+  await type(l2 + 'zzwarianty');
+  await stop('turn', 2);
+  assert(R2.words.length === 2, 'runda 2: dwa słowa');
+  log('czekam na dwa timeouty…');
+  await until(() => view() === 'roundEnd', 26000, 'koniec rundy 2');
+  assert($('.winner').textContent === names[G.order[2]], 'runda 2: wygrywa ten, kto został (trzeci)');
+  await until(() => /zapisane/.test($('#saved').textContent), 5000, 'zapis rundy 2');
+  click('[data-act="final"]');
+
+  // ---------- koniec ----------
+  await until(() => view() === 'end');
+  assert($$('.score tr').length === 3, 'koniec: tabela punktów');
+  assert(/&/.test($('.winner').textContent), 'koniec: remis 1:1 = współzwycięzcy');
+  await stop('end');
+
+  // ---------- statystyki ----------
+  click('[data-act="stats"]');
+  await until(() => $('.lgrid'), 6000, 'statystyki');
+  click(`[data-act="pickL"][data-l="${L}"]`);
+  await until(() => $('.big-pct'));
+  assert($('.big-pct .v').textContent === '100%' && $('.big-pct .w').textContent === w1, `statystyki: pierwsze słowo na ${L} = ${w1} 100%`);
+  assert(!$$('.rank .w').some(e => e.textContent.startsWith(dict)), 'zawetowane słowo nie trafiło do statystyk');
+  click(`[data-act="pickL"][data-l="${R2.letter}"]`);
+  await until(() => $$('[data-sel]').length === 2);
+  for (const cb of $$('[data-sel]')) { cb.checked = true; cb.dispatchEvent(new W.Event('change', { bubbles: true })); }
+  $('#mergeTo').value = l2 + 'zzwariant';
+  click('[data-act="merge"]');
+  await until(() => $$('[data-sel]').length === 1, 5000, 'scalenie');
+  assert($('.rank .al') && /zzwarianty/.test($('.rank .al').textContent), 'scalenie: wariant pokazany przy słowie');
+  assert($$('.rank .v')[1].textContent.startsWith('100%'), 'scalenie: słowo w 100% rund');
+  await stop('stats');
+  click('[data-act="unmerge"]');
+  await until(() => $$('[data-sel]').length === 2, 5000, 'rozłączenie');
+  assert(true, 'rozłączenie przywraca warianty');
+  // Słownik nauczył się słów z gry.
+  assert(W.RZ.known(w1), 'learned: słowo z gry jest już znane');
+}
+
+main().then(() => { log('E2E RESULT: PASS'); }, e => { log('✗ ' + e.message); log('E2E RESULT: FAIL ' + e.message); });
+</script>
+</body></html>
