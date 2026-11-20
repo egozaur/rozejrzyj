@@ -10,7 +10,7 @@ Always respond to the user in Polish (zawsze odpowiadaj po polsku). UI text and 
 
 "Rozejrzyj się" is a PL3Y party word game played on **one computer**. A letter is drawn, then players in turn name nouns starting with that letter that they can see around them. The host types each word and confirms with Enter. A player who doesn't answer in time (10–60 s, default 30) or whose word gets vetoed by the host is out for the round. The last player standing gets 1 point, and after all rounds the highest total wins. Every accepted word goes to a shared database on the PL3Y server, which feeds the statistics (e.g. "P: in 65% of rounds the first word is portfel").
 
-Static HTML/CSS/JS, no build step, served at `https://pl3y.pl/rozejrzyj/` (repo `egozaur/rozejrzyj`, GitHub Pages). There is no Node or Python on the dev machine. The look follows the PL3Y lobby (black and gold, Cormorant Garamond + JetBrains Mono + Inter; tokens copied 1:1 from `lobby/index.html`).
+Static HTML/CSS/JS, no build step, served at `https://pl3y.pl/rozejrzyj/` (repo `egozaur/rozejrzyj`, GitHub Pages). Work happens on two machines: **macOS** (Python 3, Node, Chrome; no PowerShell) and **Windows** (no Node or Python; PowerShell 5.1, Edge). Check which one you are on and use the matching command below. The look follows the PL3Y lobby (black and gold, Cormorant Garamond + JetBrains Mono + Inter; tokens copied 1:1 from `lobby/index.html`).
 
 - `index.html`: the whole game. Screens (`view`): `menu → setup → order → drum → turn → roundEnd → … → end`, plus `stats`. Loads the shared PL3Y password gate `/auth.js` (404 locally, so no password there).
 - `rz.js` (`window.RZ`):
@@ -52,12 +52,12 @@ Lives on the shared PL3Y Worker in the sibling repo `../mafia` (only these files
 Keep both sides in sync: `LETTERS`, `norm`, and the limits (≤ 60 words, ≤ 40 chars).
 
 ## Local testing
-- `powershell -ExecutionPolicy Bypass -File dev\serve.ps1` serves the parent folder (`Claude-roboczy`, so `../mafia` is reachable) on port 8092 (keep the script ASCII-only). Open `http://localhost:8092/rozejrzyj/?local=1`. Without `?local`, the game talks to the production server.
-- `?still` skips the drum animation, which helps screenshots: headless Edge doesn't advance rAF under `--virtual-time-budget`.
-- End-to-end: `sh dev/run-e2e.sh` (real time, about 45 s, prints `E2E RESULT`). It drives `dev/e2e.html`, which clicks the real buttons in an iframe with a clean local database. It covers:
+- `python3 -m http.server 8092 -d ..` (run in `rozejrzyj/`) serves the parent folder (`Claude-roboczy`, so `../mafia` is reachable) on port 8092. (`dev\serve.ps1` does the same on Windows; keep it ASCII-only.) Open `http://localhost:8092/rozejrzyj/?local=1`. Without `?local`, the game talks to the production server.
+- `?still` skips the drum animation, which helps screenshots: headless Chrome/Edge doesn't advance rAF under `--virtual-time-budget`.
+- End-to-end: `dev/run-e2e.sh` is Windows-only (Edge path, `cygpath`); on macOS run the same flags with "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" (`--headless=new --disable-gpu --enable-logging=stderr --v=0 --user-data-dir=$(mktemp -d) --window-size=1440,900 http://localhost:8092/rozejrzyj/dev/e2e.html`, real time, about 45 s; macOS has no `timeout`, so kill it after ~75 s) and grep `[e2e]` / `E2E RESULT`. It drives `dev/e2e.html`, which clicks the real buttons in an iframe with a clean local database. It covers:
   - the setup screen;
   - wrong letter, repeat, and unknown-word warning;
   - pause, veto, and timeout;
   - start rotation, scoring and the tie at the end;
   - statistics (% of first word), merge and unmerge, `learned`.
-- Screenshots: `dev/e2e.html?clean&stopAt=<view>[&n=<round>][&w=390]` with `--virtual-time-budget` (see `run-e2e.sh` for the Edge flags). `&rects=<selectors>` logs element boxes.
+- Screenshots: `dev/e2e.html?clean&stopAt=<view>[&n=<round>][&w=390]` with `--virtual-time-budget` (see `run-e2e.sh` for the flags; use Chrome on macOS). `&rects=<selectors>` logs element boxes.
