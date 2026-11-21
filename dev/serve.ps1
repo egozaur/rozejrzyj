@@ -1,5 +1,5 @@
 # Prosty serwer statyczny do testow lokalnych (bez Node i Pythona).
-# Serwuje caly folder Documents (tryb ?local=1 importuje kod serwera z ../mafia).
+# Serwuje caly folder Documents (tryb ?local=1 importuje kod serwera z ../pl3y-server).
 # Uruchom:  powershell -ExecutionPolicy Bypass -File dev\serve.ps1   ->  http://localhost:8092/rozejrzyj/
 param([int]$Port = 8092)
 $root = (Resolve-Path "$PSScriptRoot\..\..").Path

@@ -32,7 +32,7 @@ const onAuthFail = r => { if (r.status === 401 && window.PL3Y && window.PL3Y.exp
   let localDO = null;
   async function local() {
     if (localDO) return localDO;
-    const { RzWords } = await import('/mafia/worker/src/rozejrzyj/words.js');
+    const { RzWords } = await import('/pl3y-server/src/games/rozejrzyj/words.js');
     const KEY = 'rz_local_db';
     const load = () => new Map(Object.entries(store.get(KEY, {})));
     const save = m => store.set(KEY, Object.fromEntries(m));
